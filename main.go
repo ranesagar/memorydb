@@ -9,63 +9,86 @@ import (
 )
 
 type DB struct {
-	data   map[string]int
-	count  map[int]int
-	root   bool // Just for debugging. Not used.
-	level  int  // Just for debugging. Not used.
-	parent *DB
+	data         map[string]int
+	count        map[int]int
+	deletedKey   map[string]bool
+	deletedValue map[int]int
+	root         bool // Just for debugging. Not used.
+	level        int  // Just for debugging. Not used.
+	parent       *DB
 }
 
 func newDB() *DB {
 	return &DB{
-		data:   make(map[string]int),
-		count:  make(map[int]int),
-		root:   true,
-		level:  0,
-		parent: nil,
+		data:         make(map[string]int),
+		count:        make(map[int]int),
+		deletedKey:   make(map[string]bool),
+		deletedValue: make(map[int]int),
+		root:         true,
+		level:        0,
+		parent:       nil,
 	}
 }
 
 func (db *DB) Get(name string) (int, error) {
+	// recursively lookup upto the base node
+	curr := db
+	for db != nil {
+		if _, exists := db.data[name]; exists {
+			if !curr.deletedKey[name] {
+				return db.data[name], nil
+			}
 
-	if _, exists := db.data[name]; exists {
-		return db.data[name], nil
+		}
+		db = db.parent
 	}
 
 	return 0, errors.New("KEY NOT FOUND-NULL")
 }
 
 func (db *DB) Delete(name string) {
-	if v, exists := db.data[name]; exists {
-		// v := db.data[name]
-		delete(db.data, name)
-		db.count[v]--
-		if db.count[v] == 0 {
-			delete(db.count, v)
-		}
+	valueFromBase, err := db.Get(name)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
+
+	db.deletedKey[name] = true
+	db.deletedValue[valueFromBase]++
 }
 
 func (db *DB) Set(name string, value int) {
-	// check if exists, decrement old value, increment new value
-	// and update the value
-	if _, exists := db.data[name]; exists {
-		oldVal := db.data[name]
-		db.count[oldVal]--
-		if db.count[oldVal] == 0 {
-			delete(db.count, oldVal)
-		}
+	// 1.check if it was deleted in current transaction
+	// 2. Check if exists in ANY transaction, if yes:
+	//    decrement old value, increment new value, and update the value
+
+	if db.deletedKey[name] {
+		delete(db.deletedKey, name)
 	}
-	// increment or add new value
+
+	oldVal, err := db.Get(name)
+	if err == nil { // there is an old value
+		db.deletedValue[oldVal]++
+	}
+
 	db.count[value]++
 	db.data[name] = value
 }
 
 func (db *DB) Count(c int) int {
-	if _, exists := db.count[c]; exists {
-		return db.count[c]
+	// recursively lookup upto the base node and keep adding
+	// while adding, make sure to subtract # of times the value was delete if db.delete() was called
+	totalCount := 0
+	for db != nil {
+		fmt.Println(totalCount, db.count[c], db.deletedValue[c])
+		totalCount = totalCount + db.count[c] - db.deletedValue[c]
+
+		db = db.parent
 	}
-	return 0
+	if totalCount < 0 {
+		return 0
+	}
+	return totalCount
 }
 
 func main() {
@@ -161,21 +184,14 @@ func (db *DB) Log() {
 }
 
 func (db *DB) Begin() *DB {
-	newData := make(map[string]int)
-	for k, v := range db.data {
-		newData[k] = v
-	}
-
-	newCount := make(map[int]int)
-	for k, v := range db.count {
-		newCount[k] = v
-	}
-
 	return &DB{
-		data:   newData,
-		count:  newCount,
-		level:  db.level + 1,
-		parent: db,
+		data:         make(map[string]int),
+		count:        make(map[int]int),
+		deletedKey:   make(map[string]bool),
+		deletedValue: make(map[int]int),
+		root:         false,
+		level:        db.level + 1,
+		parent:       db,
 	}
 }
 
@@ -187,20 +203,34 @@ func (db *DB) Rollback() (*DB, error) {
 }
 
 func (db *DB) Commit() *DB {
+	if db.parent == nil {
+		return db
+	}
 	curr := db
 	for curr.parent != nil {
+		// 1. Deep merge all data to parent node
+		for k, v := range curr.data {
+			curr.parent.data[k] = v
+		}
+		// 2. Increment count of parent
+		for k, v := range db.count {
+			curr.parent.count[k] += v
+		}
+		// 3. Delete deleted keys. Also deep merge current deleted map
+		for k, v := range curr.deletedKey {
+			curr.parent.deletedKey[k] = v
+			delete(curr.parent.data, k)
+		}
+		// 4. Decrement count of parent
+		for k, v := range curr.deletedValue {
+			curr.parent.count[k] -= v
+			if curr.parent.count[k] <= 0 {
+				delete(curr.parent.count, k)
+			}
+		}
+		// fmt.Println(curr.parent)
 		curr = curr.parent
 	}
-	newData := make(map[string]int)
-	for k, v := range db.data {
-		newData[k] = v
-	}
 
-	newCount := make(map[int]int)
-	for k, v := range db.count {
-		newCount[k] = v
-	}
-	curr.data = newData
-	curr.count = newCount
 	return curr
 }
