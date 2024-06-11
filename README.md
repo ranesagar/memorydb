@@ -9,12 +9,13 @@ and expectations asked changes and we'll cover all. This implemetation covers fr
 complex transactions like nested transactions.
 
 # Demo
+![](demo_memorydb.mov)
 
+```
+&{data      count       deletedKey  deletedValue    root    level   parent}
+&{map[A:10] map[10:1]   map[A:true] map[10:1]       true    0       <nil>}
 
-
-
-&{map[A:10] map[10:1] map[A:true] map[10:1] true 0 <nil>}
-
+```
 # Problem Statement(s)
 
 1) Part 1: Basic CRUD Operations \
