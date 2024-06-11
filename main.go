@@ -32,10 +32,9 @@ func newDB() *DB {
 
 func (db *DB) Get(name string) (int, error) {
 	// recursively lookup upto the base node
-	curr := db
 	for db != nil {
 		if _, exists := db.data[name]; exists {
-			if !curr.deletedKey[name] {
+			if !db.deletedKey[name] {
 				return db.data[name], nil
 			}
 
