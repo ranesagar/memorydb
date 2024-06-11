@@ -33,11 +33,10 @@ func newDB() *DB {
 func (db *DB) Get(name string) (int, error) {
 	// recursively lookup upto the base node
 	for db != nil {
-		if _, exists := db.data[name]; exists {
-			if !db.deletedKey[name] {
-				return db.data[name], nil
-			}
-
+		if db.deletedKey[name] {
+			return 0, errors.New("KEY NOT FOUND-NULL")
+		} else if _, exists := db.data[name]; exists {
+			return db.data[name], nil
 		}
 		db = db.parent
 	}
