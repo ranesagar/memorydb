@@ -9,7 +9,7 @@ and expectations asked changes and we'll cover all. This implemetation covers fr
 complex transactions like nested transactions.
 
 # Demo
-![](demo_memorydb.mov)
+![](demo_memorydb.gif)
 
 ```
 &{data      count       deletedKey  deletedValue    root    level   parent}
